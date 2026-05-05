@@ -7,74 +7,78 @@ import logging
 logger = logging.getLogger("discord.tedomi.voice")
 
 
+class SilenceAudioSource(discord.AudioSource):
+    def __init__(self, duration_ms=360):
+        self.frames = int(duration_ms / 20)  # 20ms per frame
+        self.sent = 0
+
+    def read(self):
+        if self.sent >= self.frames:
+            return b""  # stop after duration
+
+        self.sent += 1
+        return b"\x00" * 3840  # 20ms frame
+
+    def is_opus(self):
+        return False
+
+
 class Voice(commands.Cog):
     def __init__(self, bot, voice_channel_id):
         self.bot = bot
         self.voice_channel_id = voice_channel_id
+        self.task = None
 
-    async def connect_to_voice(self):
+    async def connect(self):
         channel = self.bot.get_channel(self.voice_channel_id)
-
-        if not channel or not isinstance(channel, discord.VoiceChannel):
-            logger.warning("Channel not found or is not a voice channel.")
+        if not isinstance(channel, discord.VoiceChannel):
+            logger.warning("Invalid voice channel")
             return None
 
+        # reuse existing connection if present
         for vc in self.bot.voice_clients:
             if vc.channel.id == self.voice_channel_id:
-                if vc.is_connected():
-                    return vc
-                await vc.disconnect()
-                break
+                return vc
 
-        try:
-            voice_client = await channel.connect(
-                timeout=60.0, reconnect=True, self_deaf=True, self_mute=True
-            )
-            logger.info(f"Successfully joined {channel.name}")
-            return voice_client
-        except Exception as e:
-            logger.error(f"Failed to connect to {channel.name}: {e}")
-            raise
+        return await channel.connect(reconnect=True)
 
-    async def ensure_voice_connection(self):
-        if self.bot.is_closed():
-            return
+    async def burst_loop(self):
+        await self.bot.wait_until_ready()
 
-        if any(
-            vc.channel.id == self.voice_channel_id and vc.is_connected()
-            for vc in self.bot.voice_clients
-        ):
-            return
-
-        delay = 5
         while not self.bot.is_closed():
             try:
-                await self.connect_to_voice()
-                return
-            except Exception:
-                logger.warning(f"Reconnect attempt failed. Retrying in {delay} seconds...")
-                await asyncio.sleep(delay)
-                delay = min(delay * 2, 60)
+                vc = await self.connect()
+
+                if vc and vc.is_connected() and not vc.is_playing():
+                    vc.play(SilenceAudioSource(duration_ms=100))
+
+                await asyncio.sleep(36)
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Voice loop error: {e}")
+                await asyncio.sleep(5)
 
     @commands.Cog.listener()
     async def on_ready(self):
-        logger.info(f"{self.bot.user} is online!")
-        await self.ensure_voice_connection()
-
-    @commands.Cog.listener()
-    async def on_disconnect(self):
-        logger.warning("Bot has been disconnected from Discord. Voice reconnect will resume after gateway reconnection.")
+        if self.task is None:
+            self.task = asyncio.create_task(self.burst_loop())
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
-        if member == self.bot.user and before.channel is not None and after.channel is None:
-            logger.warning("Bot was disconnected from the voice channel. Attempting to reconnect...")
-            await self.ensure_voice_connection()
+        if member == self.bot.user and after.channel is None:
+            logger.warning("Disconnected from voice, reconnecting...")
+            await asyncio.sleep(2)  # small delay helps stability
+            await self.connect()
+
 
 async def setup(bot):
     voice_channel_id_str = os.getenv("VOICE_CHANNEL_ID")
     if voice_channel_id_str is None:
-        raise RuntimeError("VOICE_CHANNEL_ID environment variable is required for the Voice cog")
+        raise RuntimeError(
+            "VOICE_CHANNEL_ID environment variable is required for the Voice cog"
+        )
 
     try:
         voice_channel_id = int(voice_channel_id_str)
