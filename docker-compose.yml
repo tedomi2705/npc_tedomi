@@ -1,0 +1,9 @@
+services:
+  bot:
+    # Build the image from the Dockerfile in the current directory
+    build: .
+
+    environment:
+      - UV_NO_DEV=0
+    env_file:
+      - .env
