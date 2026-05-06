@@ -45,7 +45,7 @@ class Voice(commands.Cog):
 
     async def update_presence(self):
         activity_name = f"Đang ảo discord tại {len(self.voice_channels)} room(s)"
-        await self.bot.change_presence(activity=discord.Activity(type=discord.ActivityType.playing, name=activity_name))
+        await self.bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=activity_name))
 
     async def burst_loop(self):
         await self.bot.wait_until_ready()
