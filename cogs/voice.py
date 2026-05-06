@@ -1,4 +1,3 @@
-import os
 import discord
 from discord.ext import commands
 import asyncio
@@ -24,33 +23,39 @@ class SilenceAudioSource(discord.AudioSource):
 
 
 class Voice(commands.Cog):
-    def __init__(self, bot, voice_channel_id):
+    def __init__(self, bot):
         self.bot = bot
-        self.voice_channel_id = voice_channel_id
+        self.voice_channels = {}  # guild_id: channel_id
+        self.leaving_guilds = set()  # guilds where bot is intentionally leaving
         self.task = None
 
-    async def connect(self):
-        channel = self.bot.get_channel(self.voice_channel_id)
+    async def connect(self, channel_id):
+        channel = self.bot.get_channel(channel_id)
         if not isinstance(channel, discord.VoiceChannel):
             logger.warning("Invalid voice channel")
             return None
 
         # reuse existing connection if present
         for vc in self.bot.voice_clients:
-            if vc.channel.id == self.voice_channel_id:
+            if vc.channel.id == channel_id:
                 return vc
 
+        logger.info(f"Connecting to voice channel: {channel.name} ({channel.id})")
         return await channel.connect(reconnect=True)
 
     async def burst_loop(self):
         await self.bot.wait_until_ready()
 
         while not self.bot.is_closed():
+            if not self.voice_channels:
+                await asyncio.sleep(5)
+                continue
             try:
-                vc = await self.connect()
+                for guild_id, channel_id in list(self.voice_channels.items()):
+                    vc = await self.connect(channel_id)
 
-                if vc and vc.is_connected() and not vc.is_playing():
-                    vc.play(SilenceAudioSource(duration_ms=100))
+                    if vc and vc.is_connected() and not vc.is_playing():
+                        vc.play(SilenceAudioSource(duration_ms=100))
 
                 await asyncio.sleep(36)
 
@@ -60,29 +65,59 @@ class Voice(commands.Cog):
                 logger.error(f"Voice loop error: {e}")
                 await asyncio.sleep(5)
 
-    @commands.Cog.listener()
-    async def on_ready(self):
-        if self.task is None:
-            self.task = asyncio.create_task(self.burst_loop())
+    @commands.command()
+    async def join(self, ctx, channel: discord.VoiceChannel = None):
+        if channel is None:
+            # If no channel specified, use the author's current voice channel
+            if ctx.author.voice and ctx.author.voice.channel:
+                channel = ctx.author.voice.channel
+            else:
+                await ctx.send("Bạn phải ở trong một kênh voice hoặc chỉ định một kênh.")
+                return
+
+        self.voice_channels[ctx.guild.id] = channel.id
+        vc = await self.connect(channel.id)
+        if vc:
+            await ctx.send(f"Đã vào {channel.mention}")
+            if self.task is None or self.task.done():
+                self.task = asyncio.create_task(self.burst_loop())
+    @commands.command()
+    async def leave(self, ctx):
+        guild_id = ctx.guild.id
+        if guild_id not in self.voice_channels:
+            await ctx.send("Đang không ở trong room nào cả.")
+            return
+
+        channel_id = self.voice_channels[guild_id]
+
+        self.leaving_guilds.add(guild_id)
+
+        # Disconnect from voice
+        for vc in self.bot.voice_clients:
+            if vc.channel.id == channel_id:
+                await vc.disconnect()
+                break
+
+        del self.voice_channels[guild_id]
+        self.leaving_guilds.remove(guild_id)
+
+        # If no more channels, stop the task
+        if not self.voice_channels:
+            if self.task and not self.task.done():
+                self.task.cancel()
+                self.task = None
+
+        await ctx.send("Đã rời room")
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
         if member == self.bot.user and after.channel is None:
-            logger.warning("Disconnected from voice, reconnecting...")
-            await asyncio.sleep(2)  # small delay helps stability
-            await self.connect()
+            guild_id = before.channel.guild.id if before.channel else None
+            if guild_id and guild_id in self.voice_channels and guild_id not in self.leaving_guilds:
+                logger.warning("Disconnected from voice, reconnecting...")
+                await asyncio.sleep(2)  # small delay helps stability
+                await self.connect(self.voice_channels[guild_id])
 
 
 async def setup(bot):
-    voice_channel_id_str = os.getenv("VOICE_CHANNEL_ID")
-    if voice_channel_id_str is None:
-        raise RuntimeError(
-            "VOICE_CHANNEL_ID environment variable is required for the Voice cog"
-        )
-
-    try:
-        voice_channel_id = int(voice_channel_id_str)
-    except ValueError as exc:
-        raise ValueError("VOICE_CHANNEL_ID must be an integer") from exc
-
-    await bot.add_cog(Voice(bot, voice_channel_id))
+    await bot.add_cog(Voice(bot))
