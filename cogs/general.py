@@ -12,7 +12,7 @@ class General(commands.Cog):
     async def qr(self, ctx, choice: str = None):
         if choice is None:
             await ctx.send(
-                "https://media.discordapp.net/attachments/1499409101153636494/1499765676192039133/2384DC44-9DA1-4384-ABEE-A4E4B1B20DB9.jpg?ex=69f8a021&is=69f74ea1&hm=dac2b7b18186673af7fd7e9498f54a893b7c9b138040ddd6ef530d9f76a15a90&=&format=webp&width=964&height=960"
+                "https://media.discordapp.net/attachments/1409132849545871420/1499778199079489567/2384DC44-9DA1-4384-ABEE-A4E4B1B20DB9.jpg?ex=69fbf78b&is=69faa60b&hm=ada2abcc848bf7d973fd6d1ef496b79e989f7f49f3e69315fe589014df99598d&=&format=webp&width=860&height=856"
             )
             return
         choice = choice.lower()
@@ -20,7 +20,7 @@ class General(commands.Cog):
         qr_targets = [
             (
                 ["meo", "<@575518526811537408>", "<@611533816774787102>"],
-                "https://media.discordapp.net/attachments/1499409101153636494/1499409389847707738/image.png?ex=69f8a5d0&is=69f75450&hm=500e537bbfcbbc8a9d8b9e02760ac5ff3e04e523e1f19046b2b26d2b795a144a&=&format=webp&quality=lossless&width=540&height=960"
+                "https://media.discordapp.net/attachments/1409132849545871420/1499778199389737102/att.by7O9FQUF9QDVoMUslJMKMXkA3svgJP3t_D1SOyuDuc.jpg?ex=69fbf78b&is=69faa60b&hm=1db9c29863a841a4b4557fe448229ab18255ae724085a0ffb81effa60086aaf9&=&format=webp&width=481&height=856"
             ),
             (
                 ["mi", "<@208174648657969152>"],
@@ -28,7 +28,7 @@ class General(commands.Cog):
             ),
             (
                 ["orn", "ỏn", "<@593394674207555584>"],
-                "https://media.discordapp.net/attachments/1499409101153636494/1499409183588745318/671719351_2315840635604407_5422268897948339640_n.png?ex=69f8a59f&is=69f7541f&hm=5fc9d315660a6c84ca6afe1f57171731c396a62983facc37cdf4bc19e488d422&=&format=webp&quality=lossless&width=443&height=959"
+                "https://media.discordapp.net/attachments/1438873929728131082/1501476416850628668/image.png?ex=69fc3661&is=69fae4e1&hm=1401c4c6413be4321dc0b9fad498cdafa2dc406355d973d78a9e6e1234323a48&=&format=webp&quality=lossless&width=443&height=959"
             ),
         ]
 
