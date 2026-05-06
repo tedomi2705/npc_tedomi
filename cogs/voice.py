@@ -38,7 +38,13 @@ class Voice(commands.Cog):
         # reuse existing connection if present
         for vc in self.bot.voice_clients:
             if vc.channel.id == channel_id:
-                return vc
+                if vc.is_connected():
+                    return vc
+                try:
+                    await vc.disconnect()
+                except Exception as e:
+                    logger.warning(f"Error disconnecting existing voice client: {e}")
+                break
 
         logger.info(f"Connecting to voice channel: {channel.name} ({channel.id})")
         return await channel.connect(reconnect=True)
@@ -124,10 +130,10 @@ class Voice(commands.Cog):
     async def on_voice_state_update(self, member, before, after):
         if member == self.bot.user and after.channel is None:
             guild_id = before.channel.guild.id if before.channel else None
-            if guild_id and guild_id in self.voice_channels and guild_id not in self.leaving_guilds:
-                logger.warning("Disconnected from voice, reconnecting...")
-                await asyncio.sleep(2)  # small delay helps stability
-                await self.connect(self.voice_channels[guild_id])
+            if guild_id and guild_id in self.leaving_guilds:
+                logger.info("Bot intentionally left voice in guild %s, no reconnect.", guild_id)
+            else:
+                logger.info("Bot disconnected from voice in guild %s; letting discord.py manage reconnect.", guild_id)
 
 
 async def setup(bot):
