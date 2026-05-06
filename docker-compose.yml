@@ -5,5 +5,3 @@ services:
 
     environment:
       - UV_NO_DEV=0
-    env_file:
-      - .env
