@@ -1,6 +1,7 @@
+import textwrap
+
 import discord
 from discord.ext import commands
-import textwrap
 
 
 class General(commands.Cog):

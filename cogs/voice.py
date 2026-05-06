@@ -1,7 +1,10 @@
-import discord
-from discord.ext import commands
 import asyncio
 import logging
+from pathlib import Path
+
+import discord
+import plyvel
+from discord.ext import commands
 
 logger = logging.getLogger("discord.tedomi.voice")
 
@@ -29,6 +32,36 @@ class Voice(commands.Cog):
         self.leaving_guilds = set()  # guilds where bot is intentionally leaving
         self.task = None
 
+        self.db_path = Path(__file__).resolve().parents[1] / "data" / "voice_channels"
+        self.db_path.mkdir(parents=True, exist_ok=True)
+        self.db = plyvel.DB(self.db_path.as_posix(), create_if_missing=True)
+        self.voice_channels = self._load_channel_map()
+
+    def _load_channel_map(self):
+        channels = {}
+        try:
+            for key, value in self.db:
+                try:
+                    guild_id = int(key.decode("utf-8"))
+                    channel_id = int(value.decode("utf-8"))
+                except Exception:
+                    continue
+                channels[guild_id] = channel_id
+        except Exception as e:
+            logger.error(f"Failed loading voice channel DB: {e}")
+        return channels
+
+    def _save_channel(self, guild_id, channel_id):
+        self.db.put(str(guild_id).encode(), str(channel_id).encode())
+
+    def _delete_channel(self, guild_id):
+        self.db.delete(str(guild_id).encode())
+
+    def cog_unload(self):
+        if self.task and not self.task.done():
+            self.task.cancel()
+        self.db.close()
+
     async def connect(self, channel_id):
         channel = self.bot.get_channel(channel_id)
         if not isinstance(channel, discord.VoiceChannel):
@@ -51,7 +84,11 @@ class Voice(commands.Cog):
 
     async def update_presence(self):
         activity_name = f"Đang ảo discord tại {len(self.voice_channels)} room(s)"
-        await self.bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=activity_name))
+        await self.bot.change_presence(
+            activity=discord.Activity(
+                type=discord.ActivityType.listening, name=activity_name
+            )
+        )
 
     async def burst_loop(self):
         await self.bot.wait_until_ready()
@@ -64,7 +101,19 @@ class Voice(commands.Cog):
                 for guild_id, channel_id in list(self.voice_channels.items()):
                     vc = await self.connect(channel_id)
 
-                    if vc and vc.is_connected() and not vc.is_playing():
+                    if vc is None:
+                        if not self.bot.get_channel(channel_id):
+                            logger.warning(
+                                "Voice channel %s not found, removing saved entry for guild %s",
+                                channel_id,
+                                guild_id,
+                            )
+                            self.voice_channels.pop(guild_id, None)
+                            self._delete_channel(guild_id)
+                            await self.update_presence()
+                        continue
+
+                    if vc.is_connected() and not vc.is_playing():
                         vc.play(SilenceAudioSource(duration_ms=100))
 
                 await asyncio.sleep(36)
@@ -78,6 +127,8 @@ class Voice(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         await self.update_presence()
+        if self.voice_channels and (self.task is None or self.task.done()):
+            self.task = asyncio.create_task(self.burst_loop())
 
     @commands.command()
     async def join(self, ctx, channel: discord.VoiceChannel = None):
@@ -86,10 +137,13 @@ class Voice(commands.Cog):
             if ctx.author.voice and ctx.author.voice.channel:
                 channel = ctx.author.voice.channel
             else:
-                await ctx.send("Bạn phải ở trong một kênh voice hoặc chỉ định một kênh.")
+                await ctx.send(
+                    "Bạn phải ở trong một kênh voice hoặc chỉ định một kênh."
+                )
                 return
 
         self.voice_channels[ctx.guild.id] = channel.id
+        self._save_channel(ctx.guild.id, channel.id)
         vc = await self.connect(channel.id)
         if vc:
             await ctx.send(f"Đã vào {channel.mention}")
@@ -115,6 +169,7 @@ class Voice(commands.Cog):
                 break
 
         del self.voice_channels[guild_id]
+        self._delete_channel(guild_id)
         self.leaving_guilds.remove(guild_id)
 
         # If no more channels, stop the task
@@ -131,9 +186,14 @@ class Voice(commands.Cog):
         if member == self.bot.user and after.channel is None:
             guild_id = before.channel.guild.id if before.channel else None
             if guild_id and guild_id in self.leaving_guilds:
-                logger.info("Bot intentionally left voice in guild %s, no reconnect.", guild_id)
+                logger.info(
+                    "Bot intentionally left voice in guild %s, no reconnect.", guild_id
+                )
             else:
-                logger.info("Bot disconnected from voice in guild %s; letting discord.py manage reconnect.", guild_id)
+                logger.info(
+                    "Bot disconnected from voice in guild %s; letting discord.py manage reconnect.",
+                    guild_id,
+                )
 
 
 async def setup(bot):

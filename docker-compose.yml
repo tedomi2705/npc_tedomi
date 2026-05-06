@@ -2,6 +2,8 @@ services:
   bot:
     # Build the image from the Dockerfile in the current directory
     build: .
-
+    user: "${UID}:${GID}"
+    volumes:
+      - ./data:/app/data
     environment:
       - UV_NO_DEV=0
