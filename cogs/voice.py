@@ -43,6 +43,10 @@ class Voice(commands.Cog):
         logger.info(f"Connecting to voice channel: {channel.name} ({channel.id})")
         return await channel.connect(reconnect=True)
 
+    async def update_presence(self):
+        activity_name = f"Đang ảo discord tại {len(self.voice_channels)} room(s)"
+        await self.bot.change_presence(activity=discord.Activity(type=discord.ActivityType.playing, name=activity_name))
+
     async def burst_loop(self):
         await self.bot.wait_until_ready()
 
@@ -65,6 +69,10 @@ class Voice(commands.Cog):
                 logger.error(f"Voice loop error: {e}")
                 await asyncio.sleep(5)
 
+    @commands.Cog.listener()
+    async def on_ready(self):
+        await self.update_presence()
+
     @commands.command()
     async def join(self, ctx, channel: discord.VoiceChannel = None):
         if channel is None:
@@ -79,8 +87,10 @@ class Voice(commands.Cog):
         vc = await self.connect(channel.id)
         if vc:
             await ctx.send(f"Đã vào {channel.mention}")
+            await self.update_presence()
             if self.task is None or self.task.done():
                 self.task = asyncio.create_task(self.burst_loop())
+
     @commands.command()
     async def leave(self, ctx):
         guild_id = ctx.guild.id
@@ -107,6 +117,7 @@ class Voice(commands.Cog):
                 self.task.cancel()
                 self.task = None
 
+        await self.update_presence()
         await ctx.send("Đã rời room")
 
     @commands.Cog.listener()
