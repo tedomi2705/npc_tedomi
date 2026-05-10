@@ -51,6 +51,10 @@ class General(commands.Cog):
                     """
         await ctx.send(textwrap.dedent(messages).strip())
 
+    @commands.command()
+    async def random(self, ctx):
+        await ctx.reply("1 bạn ngẫu nhiên: <@208174648657969152>")
+
 
 async def setup(bot):
     await bot.add_cog(General(bot))
