@@ -65,7 +65,25 @@ class General(commands.Cog):
 
         selected = random.choice(options)
         await ctx.send(f"Tôi chọn: {selected}")
+    
+    @commands.command()
+    async def roll(self, ctx, choices: str):
+        numbers = [choice.strip() for choice in choices.split(",") if choice.strip()]
+        if len(numbers) != 2:
+            await ctx.send("Cú pháp: `troll [số_đầu],[số_cuối]")
+            return
+        try:
+            start, end = map(int, numbers)
+        except ValueError:
+            await ctx.send("Cú pháp: `troll [số_đầu],[số_cuối]")
+            return
+        if start >= end:
+            await ctx.send("Số đầu phải nhỏ hơn số cuối.")
+            return
+        import random
 
+        result = random.randint(start, end)
+        await ctx.send(f"Bạn đã lắc được: {result}")
 
 async def setup(bot):
     await bot.add_cog(General(bot))
