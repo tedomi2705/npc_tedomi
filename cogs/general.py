@@ -55,6 +55,17 @@ class General(commands.Cog):
     async def random(self, ctx):
         await ctx.reply("1 bạn ngẫu nhiên: <@208174648657969152>")
 
+    @commands.command()
+    async def pick(self, ctx, *, choices: str):
+        options = [choice.strip() for choice in choices.split(",") if choice.strip()]
+        if not options:
+            await ctx.send("Vui lòng cung cấp ít nhất một lựa chọn, phân tách bằng dấu phẩy.")
+            return
+        import random
+
+        selected = random.choice(options)
+        await ctx.send(f"Tôi chọn: {selected}")
+
 
 async def setup(bot):
     await bot.add_cog(General(bot))
