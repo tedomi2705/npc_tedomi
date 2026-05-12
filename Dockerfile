@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.23
+
 FROM astral/uv:python3.13-trixie-slim AS build
 
 # Install the project into `/app`
@@ -23,8 +25,10 @@ RUN uv python install 3.14
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+RUN --mount=type=cache,id=apt-cache-trixie,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=apt-lib-trixie,target=/var/lib/apt,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean && \
+    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
     libleveldb-dev build-essential
@@ -52,8 +56,10 @@ RUN groupadd --system --gid 999 nonroot \
 # Install runtime dependencies
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+RUN --mount=type=cache,id=apt-cache-trixie,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=apt-lib-trixie,target=/var/lib/apt,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean && \
+    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
     libleveldb1d ca-certificates
