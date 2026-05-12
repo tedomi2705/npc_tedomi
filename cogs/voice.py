@@ -8,12 +8,17 @@ from discord.ext import commands
 
 logger = logging.getLogger("discord.tedomi.voice")
 
+VOICE_RECONNECT_GRACE_SECONDS = 90
+VOICE_RECONCILE_SECONDS = 300
+
 
 class Voice(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.voice_channels = {}  # guild_id: channel_id
         self.leaving_guilds = set()  # guilds where bot is intentionally leaving
+        self.connect_locks = {}  # guild_id: asyncio.Lock
+        self.reconnect_tasks = {}  # guild_id: asyncio.Task
         self.task = None
 
         self.db_path = Path(__file__).resolve().parents[1] / "data" / "voice_channels"
@@ -44,27 +49,75 @@ class Voice(commands.Cog):
     def cog_unload(self):
         if self.task and not self.task.done():
             self.task.cancel()
+        for task in self.reconnect_tasks.values():
+            if not task.done():
+                task.cancel()
         self.db.close()
 
-    async def connect(self, channel_id):
+    def _connect_lock(self, guild_id):
+        lock = self.connect_locks.get(guild_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self.connect_locks[guild_id] = lock
+        return lock
+
+    def _voice_client_for_guild(self, guild_id):
+        for vc in self.bot.voice_clients:
+            channel = getattr(vc, "channel", None)
+            guild = getattr(channel, "guild", None)
+            if guild and guild.id == guild_id:
+                return vc
+        return None
+
+    def _cancel_reconnect(self, guild_id):
+        task = self.reconnect_tasks.pop(guild_id, None)
+        if task and task is not asyncio.current_task() and not task.done():
+            task.cancel()
+
+    async def connect(self, channel_id, *, force=False):
         channel = self.bot.get_channel(channel_id)
         if not isinstance(channel, discord.VoiceChannel):
-            logger.warning("Invalid voice channel")
+            logger.warning("Invalid voice channel %s", channel_id)
             return None
 
-        # reuse existing connection if present
-        for vc in self.bot.voice_clients:
-            if vc.channel.id == channel_id:
+        guild_id = channel.guild.id
+        async with self._connect_lock(guild_id):
+            vc = self._voice_client_for_guild(guild_id)
+            if vc:
+                current_channel = getattr(vc, "channel", None)
                 if vc.is_connected():
+                    if current_channel and current_channel.id == channel_id:
+                        self._cancel_reconnect(guild_id)
+                        return vc
+
+                    logger.info(
+                        "Moving voice connection in guild %s to channel %s",
+                        guild_id,
+                        channel.id,
+                    )
+                    await vc.move_to(channel)
+                    self._cancel_reconnect(guild_id)
                     return vc
+
+                if not force:
+                    logger.info(
+                        "Voice client for guild %s is not connected; waiting for "
+                        "discord.py reconnect before starting a new handshake.",
+                        guild_id,
+                    )
+                    return vc
+
                 try:
                     await vc.disconnect()
-                except Exception as e:
-                    logger.warning(f"Error disconnecting existing voice client: {e}")
-                break
+                except Exception:
+                    logger.exception(
+                        "Error disconnecting stale voice client for guild %s", guild_id
+                    )
 
-        logger.info(f"Connecting to voice channel: {channel.name} ({channel.id})")
-        return await channel.connect(reconnect=True)
+            logger.info("Connecting to voice channel: %s (%s)", channel.name, channel.id)
+            vc = await channel.connect(reconnect=True)
+            self._cancel_reconnect(guild_id)
+            return vc
 
     async def update_presence(self):
         activity_name = f"Đang ảo discord tại {len(self.voice_channels)} room(s)"
@@ -83,27 +136,54 @@ class Voice(commands.Cog):
                 continue
             try:
                 for guild_id, channel_id in list(self.voice_channels.items()):
-                    vc = await self.connect(channel_id)
-
-                    if vc is None:
-                        if not self.bot.get_channel(channel_id):
-                            logger.warning(
-                                "Voice channel %s not found, removing saved entry for guild %s",
-                                channel_id,
-                                guild_id,
-                            )
-                            self.voice_channels.pop(guild_id, None)
-                            self._delete_channel(guild_id)
-                            await self.update_presence()
+                    channel = self.bot.get_channel(channel_id)
+                    if channel is None:
+                        logger.warning(
+                            "Voice channel %s not found, removing saved entry for guild %s",
+                            channel_id,
+                            guild_id,
+                        )
+                        self.voice_channels.pop(guild_id, None)
+                        self._delete_channel(guild_id)
+                        await self.update_presence()
                         continue
 
-                await asyncio.sleep(36)
+                    vc = self._voice_client_for_guild(guild_id)
+                    if vc is None:
+                        await self.connect(channel_id, force=True)
+
+                await asyncio.sleep(VOICE_RECONCILE_SECONDS)
 
             except asyncio.CancelledError:
                 break
             except Exception:
                 logger.exception("Voice loop error")
                 await asyncio.sleep(5)
+
+    async def reconnect_after_grace(self, guild_id, channel_id):
+        try:
+            await asyncio.sleep(VOICE_RECONNECT_GRACE_SECONDS)
+            if self.bot.is_closed() or guild_id not in self.voice_channels:
+                return
+
+            vc = self._voice_client_for_guild(guild_id)
+            if vc and vc.is_connected():
+                return
+
+            logger.info(
+                "Voice connection for guild %s did not recover after %ss; reconnecting.",
+                guild_id,
+                VOICE_RECONNECT_GRACE_SECONDS,
+            )
+            await self.connect(channel_id, force=True)
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("Delayed voice reconnect failed for guild %s", guild_id)
+        finally:
+            task = self.reconnect_tasks.get(guild_id)
+            if task is asyncio.current_task():
+                self.reconnect_tasks.pop(guild_id, None)
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -125,7 +205,8 @@ class Voice(commands.Cog):
 
         self.voice_channels[ctx.guild.id] = channel.id
         self._save_channel(ctx.guild.id, channel.id)
-        vc = await self.connect(channel.id)
+        self._cancel_reconnect(ctx.guild.id)
+        vc = await self.connect(channel.id, force=True)
         if vc:
             await ctx.send(f"Đã vào {channel.mention}")
             await self.update_presence()
@@ -158,6 +239,7 @@ class Voice(commands.Cog):
             if self.task and not self.task.done():
                 self.task.cancel()
                 self.task = None
+        self._cancel_reconnect(guild_id)
 
         await self.update_presence()
         await ctx.send("Đã rời room")
@@ -172,9 +254,18 @@ class Voice(commands.Cog):
                 )
             else:
                 logger.info(
-                    "Bot disconnected from voice in guild %s; letting discord.py manage reconnect.",
+                    "Bot disconnected from voice in guild %s; letting discord.py "
+                    "manage reconnect before scheduling fallback.",
                     guild_id,
                 )
+                channel_id = self.voice_channels.get(guild_id)
+                if channel_id:
+                    self._cancel_reconnect(guild_id)
+                    self.reconnect_tasks[guild_id] = asyncio.create_task(
+                        self.reconnect_after_grace(guild_id, channel_id)
+                    )
+        elif member == self.bot.user and after.channel is not None:
+            self._cancel_reconnect(after.channel.guild.id)
 
 
 async def setup(bot):
