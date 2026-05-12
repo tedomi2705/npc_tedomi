@@ -9,22 +9,6 @@ from discord.ext import commands
 logger = logging.getLogger("discord.tedomi.voice")
 
 
-class SilenceAudioSource(discord.AudioSource):
-    def __init__(self, duration_ms=360):
-        self.frames = int(duration_ms / 20)  # 20ms per frame
-        self.sent = 0
-
-    def read(self):
-        if self.sent >= self.frames:
-            return b""  # stop after duration
-
-        self.sent += 1
-        return b"\x00" * 3840  # 20ms frame
-
-    def is_opus(self):
-        return False
-
-
 class Voice(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -113,15 +97,12 @@ class Voice(commands.Cog):
                             await self.update_presence()
                         continue
 
-                    if vc.is_connected() and not vc.is_playing():
-                        vc.play(SilenceAudioSource(duration_ms=100))
-
                 await asyncio.sleep(36)
 
             except asyncio.CancelledError:
                 break
-            except Exception as e:
-                logger.error(f"Voice loop error: {e}")
+            except Exception:
+                logger.exception("Voice loop error")
                 await asyncio.sleep(5)
 
     @commands.Cog.listener()
