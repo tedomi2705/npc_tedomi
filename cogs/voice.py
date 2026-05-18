@@ -1,15 +1,16 @@
 import asyncio
 import logging
-from pathlib import Path
+import os
 
 import discord
-import plyvel
+import redis
 from discord.ext import commands
 
 logger = logging.getLogger("discord.tedomi.voice")
 
 VOICE_RECONNECT_GRACE_SECONDS = 90
 VOICE_RECONCILE_SECONDS = 300
+VOICE_CHANNELS_KEY = os.getenv("VOICE_CHANNELS_REDIS_KEY", "npc:voice_channels")
 
 
 class Voice(commands.Cog):
@@ -21,18 +22,21 @@ class Voice(commands.Cog):
         self.reconnect_tasks = {}  # guild_id: asyncio.Task
         self.task = None
 
-        self.db_path = Path(__file__).resolve().parents[1] / "data" / "voice_channels"
-        self.db_path.mkdir(parents=True, exist_ok=True)
-        self.db = plyvel.DB(self.db_path.as_posix(), create_if_missing=True)
+        redis_url = os.getenv("REDIS_URL")
+        if not redis_url:
+            raise RuntimeError("REDIS_URL environment variable is required")
+
+        self.redis = redis.Redis.from_url(redis_url, decode_responses=True)
+        self.redis.ping()
         self.voice_channels = self._load_channel_map()
 
     def _load_channel_map(self):
         channels = {}
         try:
-            for key, value in self.db:
+            for key, value in self.redis.hgetall(VOICE_CHANNELS_KEY).items():
                 try:
-                    guild_id = int(key.decode("utf-8"))
-                    channel_id = int(value.decode("utf-8"))
+                    guild_id = int(key)
+                    channel_id = int(value)
                 except Exception:
                     continue
                 channels[guild_id] = channel_id
@@ -41,10 +45,10 @@ class Voice(commands.Cog):
         return channels
 
     def _save_channel(self, guild_id, channel_id):
-        self.db.put(str(guild_id).encode(), str(channel_id).encode())
+        self.redis.hset(VOICE_CHANNELS_KEY, str(guild_id), str(channel_id))
 
     def _delete_channel(self, guild_id):
-        self.db.delete(str(guild_id).encode())
+        self.redis.hdel(VOICE_CHANNELS_KEY, str(guild_id))
 
     def cog_unload(self):
         if self.task and not self.task.done():
@@ -52,7 +56,6 @@ class Voice(commands.Cog):
         for task in self.reconnect_tasks.values():
             if not task.done():
                 task.cancel()
-        self.db.close()
 
     def _connect_lock(self, guild_id):
         lock = self.connect_locks.get(guild_id)

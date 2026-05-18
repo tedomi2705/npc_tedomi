@@ -2,13 +2,15 @@ services:
   bot:
     # Build the image from the Dockerfile in the current directory
     build: .
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
     user: "${UID}:${GID}"
-    volumes:
-      - data:/app/data
     environment:
       - UV_NO_DEV=0
+      - HEALTH_HOST=0.0.0.0
+      - HEALTH_PORT=8080
+      - HEALTH_UNREADY_EXIT_SECONDS=300
+      - VOICE_CHANNELS_REDIS_KEY=npc:voice_channels
     env_file:
       - .env
-
-volumes:
-  data:

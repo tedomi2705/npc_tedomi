@@ -26,8 +26,6 @@ multidict==6.7.1
     # via
     #   aiohttp
     #   yarl
-plyvel==1.5.1
-    # via npc (pyproject.toml)
 propcache==0.5.2
     # via
     #   aiohttp
@@ -37,6 +35,8 @@ pycparser==3.0
 pynacl==1.5.0
     # via discord-py
 python-dotenv==1.2.2
+    # via npc (pyproject.toml)
+redis==7.4.0
     # via npc (pyproject.toml)
 yarl==1.23.0
     # via aiohttp
