@@ -42,6 +42,13 @@ class NPCBot(commands.Bot):
         if self.health_server:
             self.health_server.close()
             await self.health_server.wait_closed()
+
+        for voice_client in list(self.voice_clients):
+            try:
+                await voice_client.disconnect(force=True)
+            except Exception:
+                logger.exception("Error disconnecting voice client during shutdown")
+
         await super().close()
 
     async def watch_health(self):
