@@ -3,7 +3,7 @@ import logging
 import os
 
 import discord
-import redis
+import redis.asyncio as redis
 from discord.ext import commands
 
 logger = logging.getLogger("discord.tedomi.voice")
@@ -27,13 +27,17 @@ class Voice(commands.Cog):
             raise RuntimeError("REDIS_URL environment variable is required")
 
         self.redis = redis.Redis.from_url(redis_url, decode_responses=True)
-        self.redis.ping()
-        self.voice_channels = self._load_channel_map()
+        self.voice_channels = {}
 
-    def _load_channel_map(self):
+    async def initialize(self):
+        await self.redis.ping()
+        self.voice_channels = await self._load_channel_map()
+
+    async def _load_channel_map(self):
         channels = {}
         try:
-            for key, value in self.redis.hgetall(VOICE_CHANNELS_KEY).items():
+            saved_channels = await self.redis.hgetall(VOICE_CHANNELS_KEY)
+            for key, value in saved_channels.items():
                 try:
                     guild_id = int(key)
                     channel_id = int(value)
@@ -44,11 +48,11 @@ class Voice(commands.Cog):
             logger.error(f"Failed loading voice channel DB: {e}")
         return channels
 
-    def _save_channel(self, guild_id, channel_id):
-        self.redis.hset(VOICE_CHANNELS_KEY, str(guild_id), str(channel_id))
+    async def _save_channel(self, guild_id, channel_id):
+        await self.redis.hset(VOICE_CHANNELS_KEY, str(guild_id), str(channel_id))
 
-    def _delete_channel(self, guild_id):
-        self.redis.hdel(VOICE_CHANNELS_KEY, str(guild_id))
+    async def _delete_channel(self, guild_id):
+        await self.redis.hdel(VOICE_CHANNELS_KEY, str(guild_id))
 
     def cog_unload(self):
         if self.task and not self.task.done():
@@ -56,6 +60,7 @@ class Voice(commands.Cog):
         for task in self.reconnect_tasks.values():
             if not task.done():
                 task.cancel()
+        asyncio.create_task(self.redis.aclose())
 
     def _connect_lock(self, guild_id):
         lock = self.connect_locks.get(guild_id)
@@ -147,7 +152,7 @@ class Voice(commands.Cog):
                             guild_id,
                         )
                         self.voice_channels.pop(guild_id, None)
-                        self._delete_channel(guild_id)
+                        await self._delete_channel(guild_id)
                         await self.update_presence()
                         continue
 
@@ -207,7 +212,7 @@ class Voice(commands.Cog):
                 return
 
         self.voice_channels[ctx.guild.id] = channel.id
-        self._save_channel(ctx.guild.id, channel.id)
+        await self._save_channel(ctx.guild.id, channel.id)
         self._cancel_reconnect(ctx.guild.id)
         vc = await self.connect(channel.id, force=True)
         if vc:
@@ -234,7 +239,7 @@ class Voice(commands.Cog):
                 break
 
         del self.voice_channels[guild_id]
-        self._delete_channel(guild_id)
+        await self._delete_channel(guild_id)
         self.leaving_guilds.remove(guild_id)
 
         # If no more channels, stop the task
@@ -272,4 +277,6 @@ class Voice(commands.Cog):
 
 
 async def setup(bot):
-    await bot.add_cog(Voice(bot))
+    cog = Voice(bot)
+    await cog.initialize()
+    await bot.add_cog(cog)
