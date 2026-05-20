@@ -157,7 +157,7 @@ class Voice(commands.Cog):
                         continue
 
                     vc = self._voice_client_for_guild(guild_id)
-                    if vc is None:
+                    if vc is None or not vc.is_connected():
                         await self.connect(channel_id, force=True)
 
                 await asyncio.sleep(VOICE_RECONCILE_SECONDS)
