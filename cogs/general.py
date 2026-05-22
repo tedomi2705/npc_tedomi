@@ -9,7 +9,7 @@ class General(commands.Cog):
         self.bot = bot
 
     @commands.command()
-    async def qr(self, ctx, *, choices: str = None):
+    async def qr(self, ctx, *, choice: str = None):
         if choice is None:
             await ctx.send(
                 "https://media.discordapp.net/attachments/1409132849545871420/1499778199079489567/2384DC44-9DA1-4384-ABEE-A4E4B1B20DB9.jpg?ex=69fbf78b&is=69faa60b&hm=ada2abcc848bf7d973fd6d1ef496b79e989f7f49f3e69315fe589014df99598d&=&format=webp&width=860&height=856"
