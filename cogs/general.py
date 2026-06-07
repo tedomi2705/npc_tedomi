@@ -1,9 +1,17 @@
 import ast
+import asyncio
+import json
+import logging
 import math
 import operator
+import os
+import re
 import textwrap
+import time
+import uuid
 
 import discord
+import redis.asyncio as redis
 from discord.ext import commands
 
 
@@ -25,6 +33,37 @@ CALC_FUNCTIONS = {
 
 MAX_CALC_POWER = 100
 MAX_CALC_ABS_RESULT = 10**100
+MAX_ALARM_SECONDS = 30 * 24 * 60 * 60
+ALARMS_KEY = os.getenv("ALARMS_REDIS_KEY", "npc:alarms")
+logger = logging.getLogger("discord.tedomi.general")
+
+
+def parse_alarm_duration(duration: str):
+    multipliers = {
+        "s": 1,
+        "m": 60,
+        "h": 60 * 60,
+        "d": 24 * 60 * 60,
+    }
+
+    duration = duration.strip().lower()
+    seconds = 0
+    position = 0
+    for match in re.finditer(r"(\d+)([smhd])", duration):
+        if match.start() != position:
+            raise ValueError("Thời gian không hợp lệ.")
+
+        value = int(match.group(1))
+        unit = match.group(2)
+        seconds += value * multipliers[unit]
+        position = match.end()
+
+    if position != len(duration):
+        raise ValueError("Thời gian không hợp lệ.")
+
+    if seconds <= 0 or seconds > MAX_ALARM_SECONDS:
+        raise ValueError("Thời gian không hợp lệ.")
+    return seconds
 
 
 def calculate_expression(expression: str):
@@ -69,6 +108,75 @@ def calculate_expression(expression: str):
 class General(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.alarm_tasks = {}
+        self.alarms_loaded = False
+
+        redis_url = os.getenv("REDIS_URL")
+        if not redis_url:
+            raise RuntimeError("REDIS_URL environment variable is required")
+
+        self.redis = redis.Redis.from_url(redis_url, decode_responses=True)
+
+    def cog_unload(self):
+        for task in self.alarm_tasks.values():
+            if not task.done():
+                task.cancel()
+        asyncio.create_task(self.redis.aclose())
+
+    async def _load_alarms(self):
+        try:
+            saved_alarms = await self.redis.hgetall(ALARMS_KEY)
+        except Exception:
+            logger.exception("Failed loading alarms from Redis")
+            return
+
+        for alarm_id, raw_alarm in saved_alarms.items():
+            if alarm_id in self.alarm_tasks:
+                continue
+
+            try:
+                alarm = json.loads(raw_alarm)
+                due_at = float(alarm["due_at"])
+                channel_id = int(alarm["channel_id"])
+                author_id = int(alarm["author_id"])
+                message = str(alarm["message"])
+            except Exception:
+                logger.warning("Deleting invalid alarm payload: %s", alarm_id)
+                await self.redis.hdel(ALARMS_KEY, alarm_id)
+                continue
+
+            self._schedule_alarm(alarm_id, due_at, channel_id, author_id, message)
+
+    def _schedule_alarm(self, alarm_id, due_at, channel_id, author_id, message):
+        task = asyncio.create_task(
+            self._send_alarm(alarm_id, due_at, channel_id, author_id, message)
+        )
+        self.alarm_tasks[alarm_id] = task
+
+    async def _send_alarm(self, alarm_id, due_at, channel_id, author_id, message):
+        try:
+            await asyncio.sleep(max(0, due_at - time.time()))
+            channel = self.bot.get_channel(channel_id)
+            if channel is None:
+                channel = await self.bot.fetch_channel(channel_id)
+
+            await channel.send(f"<@{author_id}> nhắc nè: {message}")
+            await self.redis.hdel(ALARMS_KEY, alarm_id)
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("Failed sending alarm %s", alarm_id)
+            await self.redis.hdel(ALARMS_KEY, alarm_id)
+        finally:
+            self.alarm_tasks.pop(alarm_id, None)
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        if self.alarms_loaded:
+            return
+
+        self.alarms_loaded = True
+        await self._load_alarms()
 
     @commands.command()
     async def qr(self, ctx, *, choice: str = None):
@@ -140,6 +248,31 @@ class General(commands.Cog):
             return
 
         await ctx.send(f"Kết quả: {result}")
+
+    @commands.command(name="alarm")
+    async def alarm(self, ctx, duration: str = None, *, message: str = None):
+        if duration is None or message is None or not message.strip():
+            await ctx.send("Cú pháp: `talarm [thời gian] [nội dung]`, ví dụ `talarm 3m uống nước`.")
+            return
+
+        try:
+            seconds = parse_alarm_duration(duration)
+        except ValueError:
+            await ctx.send("Thời gian hợp lệ: `s`, `m`, `h`, `d`. Ví dụ: `3m`, `6h`, `3h6m`. Tối đa 30 ngày.")
+            return
+
+        alarm_id = str(uuid.uuid4())
+        due_at = time.time() + seconds
+        message = message.strip()
+        alarm = {
+            "due_at": due_at,
+            "channel_id": ctx.channel.id,
+            "author_id": ctx.author.id,
+            "message": message,
+        }
+        await self.redis.hset(ALARMS_KEY, alarm_id, json.dumps(alarm))
+        self._schedule_alarm(alarm_id, due_at, ctx.channel.id, ctx.author.id, message)
+        await ctx.send(f"Đã đặt nhắc sau `{duration}`.")
     
     @commands.command()
     async def roll(self, ctx, choices: str):

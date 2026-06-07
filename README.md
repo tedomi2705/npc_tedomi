@@ -26,5 +26,6 @@ docker compose up -d --build
 ```
 
 Voice channel state is stored in Upstash Redis using `VOICE_CHANNELS_REDIS_KEY` (`npc:voice_channels` by default), so failover does not depend on a local Docker volume.
+Pending `talarm` reminders are stored in the same Redis instance using `ALARMS_REDIS_KEY` (`npc:alarms` by default), so reminders survive bot restarts.
 
 Discord bots using one token should not run active-active replicas. For failover across hosts, run one active container at a time and let your orchestrator start a replacement on another host using the same Upstash Redis instance.
