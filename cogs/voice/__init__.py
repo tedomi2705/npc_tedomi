@@ -6,6 +6,10 @@ import discord
 import redis.asyncio as redis
 from discord.ext import commands
 
+from .join import JoinCommand
+from .leave import LeaveCommand
+
+
 logger = logging.getLogger("discord.tedomi.voice")
 
 VOICE_RECONNECT_GRACE_SECONDS = 90
@@ -13,7 +17,7 @@ VOICE_RECONCILE_SECONDS = 300
 VOICE_CHANNELS_KEY = os.getenv("VOICE_CHANNELS_REDIS_KEY", "npc:voice_channels")
 
 
-class Voice(commands.Cog):
+class Voice(JoinCommand, LeaveCommand, commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.voice_channels = {}  # guild_id: channel_id
@@ -198,59 +202,6 @@ class Voice(commands.Cog):
         await self.update_presence()
         if self.voice_channels and (self.task is None or self.task.done()):
             self.task = asyncio.create_task(self.burst_loop())
-
-    @commands.command()
-    async def join(self, ctx, channel: discord.VoiceChannel = None):
-        if channel is None:
-            # If no channel specified, use the author's current voice channel
-            if ctx.author.voice and ctx.author.voice.channel:
-                channel = ctx.author.voice.channel
-            else:
-                await ctx.send(
-                    "Bạn phải ở trong một kênh voice hoặc chỉ định một kênh."
-                )
-                return
-
-        self.voice_channels[ctx.guild.id] = channel.id
-        await self._save_channel(ctx.guild.id, channel.id)
-        self._cancel_reconnect(ctx.guild.id)
-        vc = await self.connect(channel.id, force=True)
-        if vc:
-            await ctx.send(f"Đã vào {channel.mention}")
-            await self.update_presence()
-            if self.task is None or self.task.done():
-                self.task = asyncio.create_task(self.burst_loop())
-
-    @commands.command()
-    async def leave(self, ctx):
-        guild_id = ctx.guild.id
-        if guild_id not in self.voice_channels:
-            await ctx.send("Đang không ở trong room nào cả.")
-            return
-
-        channel_id = self.voice_channels[guild_id]
-
-        self.leaving_guilds.add(guild_id)
-
-        # Disconnect from voice
-        for vc in self.bot.voice_clients:
-            if vc.channel.id == channel_id:
-                await vc.disconnect()
-                break
-
-        del self.voice_channels[guild_id]
-        await self._delete_channel(guild_id)
-        self.leaving_guilds.remove(guild_id)
-
-        # If no more channels, stop the task
-        if not self.voice_channels:
-            if self.task and not self.task.done():
-                self.task.cancel()
-                self.task = None
-        self._cancel_reconnect(guild_id)
-
-        await self.update_presence()
-        await ctx.send("Đã rời room")
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
