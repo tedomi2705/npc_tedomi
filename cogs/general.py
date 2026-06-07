@@ -272,7 +272,7 @@ class General(commands.Cog):
         }
         await self.redis.hset(ALARMS_KEY, alarm_id, json.dumps(alarm))
         self._schedule_alarm(alarm_id, due_at, ctx.channel.id, ctx.author.id, message)
-        await ctx.send(f"Đã đặt nhắc sau `{duration}`.")
+        await ctx.send(f"Đã đặt nhắc sau <t:{int(due_at)}:R>.")
     
     @commands.command()
     async def roll(self, ctx, choices: str):
