@@ -5,7 +5,14 @@ from discord.ext import commands
 
 class PickCommand:
     @commands.command()
-    async def pick(self, ctx, *, choices: str):
+    async def pick(
+        self,
+        ctx,
+        *,
+        choices: str = commands.parameter(
+            description="Danh sách lựa chọn, phân tách bằng dấu phẩy."
+        ),
+    ):
         options = [choice.strip() for choice in choices.split(",") if choice.strip()]
         if not options:
             await ctx.reply(

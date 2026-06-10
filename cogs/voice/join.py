@@ -6,7 +6,14 @@ from discord.ext import commands
 
 class JoinCommand:
     @commands.command()
-    async def join(self, ctx, channel: discord.VoiceChannel = None):
+    async def join(
+        self,
+        ctx,
+        channel: discord.VoiceChannel = commands.parameter(
+            default=None,
+            description="Kênh voice muốn bot tham gia; bỏ trống để dùng kênh hiện tại.",
+        ),
+    ):
         if channel is None:
             if ctx.author.voice and ctx.author.voice.channel:
                 channel = ctx.author.voice.channel

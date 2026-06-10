@@ -66,7 +66,14 @@ def calculate_expression(expression: str):
 
 class CalcCommand:
     @commands.command()
-    async def calc(self, ctx, *, expression: str):
+    async def calc(
+        self,
+        ctx,
+        *,
+        expression: str = commands.parameter(
+            description="Biểu thức cần tính, ví dụ: (2 + 3) * 4 hoặc sqrt(9)."
+        ),
+    ):
         try:
             result = calculate_expression(expression)
         except ZeroDivisionError:

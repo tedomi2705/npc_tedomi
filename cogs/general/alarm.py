@@ -205,7 +205,19 @@ class AlarmCommand:
         await self._load_alarms()
 
     @commands.command(name="alarm")
-    async def alarm(self, ctx, duration: str = None, *, message: str = None):
+    async def alarm(
+        self,
+        ctx,
+        duration: str = commands.parameter(
+            default=None,
+            description="Thời lượng nhắc như 3m, 6h, 3h6m; hoặc list/unset.",
+        ),
+        *,
+        message: str = commands.parameter(
+            default=None,
+            description="Nội dung nhắc, hoặc ID alarm khi dùng unset.",
+        ),
+    ):
         if duration is None:
             await ctx.reply(
                 "Cú pháp: `talarm [thời gian] [nội dung]`, ví dụ `talarm 3m uống nước`."
