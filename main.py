@@ -20,7 +20,12 @@ intents.message_content = True
 
 class NPCBot(commands.Bot):
     def __init__(self):
-        super().__init__(command_prefix="t", case_insensitive=True, strip_after_prefix=True, intents=intents)
+        super().__init__(
+            command_prefix=("t", "T"),
+            case_insensitive=True,
+            strip_after_prefix=True,
+            intents=intents,
+        )
         self.health_server = None
         self.health_watchdog_task = None
 
