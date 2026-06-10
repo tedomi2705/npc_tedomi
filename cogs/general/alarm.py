@@ -17,6 +17,17 @@ MAX_ALARM_LIST_ITEMS = 20
 MAX_ALARM_LIST_MESSAGE_LENGTH = 120
 
 
+def format_alarm_list_target(message, message_link=None):
+    message = message.replace("\n", " ").replace("`", "'")
+    if len(message) > MAX_ALARM_LIST_MESSAGE_LENGTH:
+        message = message[: MAX_ALARM_LIST_MESSAGE_LENGTH - 3] + "..."
+
+    if message_link:
+        return f"[nội dung]({message_link})"
+
+    return message
+
+
 def parse_alarm_duration(duration: str):
     multipliers = {
         "s": 1,
@@ -132,6 +143,7 @@ class AlarmCommand:
                 author_id = int(alarm["author_id"])
                 due_at = float(alarm["due_at"])
                 message = str(alarm["message"])
+                message_link = alarm.get("message_link")
             except Exception:
                 logger.warning("Deleting invalid alarm payload: %s", alarm_id)
                 await self.redis.hdel(ALARMS_KEY, alarm_id)
@@ -140,7 +152,7 @@ class AlarmCommand:
             if author_id != ctx.author.id:
                 continue
 
-            alarms.append((due_at, alarm_id, message))
+            alarms.append((due_at, alarm_id, message, message_link))
 
         if not alarms:
             embed = discord.Embed(
@@ -153,11 +165,9 @@ class AlarmCommand:
 
         alarms.sort()
         lines = []
-        for due_at, alarm_id, message in alarms[:MAX_ALARM_LIST_ITEMS]:
-            message = message.replace("`", "'")
-            if len(message) > MAX_ALARM_LIST_MESSAGE_LENGTH:
-                message = message[: MAX_ALARM_LIST_MESSAGE_LENGTH - 3] + "..."
-            lines.append(f"- `{alarm_id}` - <t:{int(due_at)}:R> - {message}")
+        for due_at, alarm_id, message, message_link in alarms[:MAX_ALARM_LIST_ITEMS]:
+            target = format_alarm_list_target(message, message_link)
+            lines.append(f"- `{alarm_id}` - <t:{int(due_at)}:R> - {target}")
 
         if len(alarms) > MAX_ALARM_LIST_ITEMS:
             lines.append(f"- ... và {len(alarms) - MAX_ALARM_LIST_ITEMS} alarm khác.")
@@ -235,11 +245,13 @@ class AlarmCommand:
         alarm_id = await self._new_alarm_id()
         due_at = time.time() + seconds
         message = message.strip()
+        message_link = getattr(ctx.message, "jump_url", None)
         alarm = {
             "due_at": due_at,
             "channel_id": ctx.channel.id,
             "author_id": ctx.author.id,
             "message": message,
+            "message_link": message_link,
         }
         await self.redis.hset(ALARMS_KEY, alarm_id, json.dumps(alarm))
         self._schedule_alarm(alarm_id, due_at, ctx.channel.id, ctx.author.id, message)
