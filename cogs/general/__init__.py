@@ -10,6 +10,7 @@ from .pick import PickCommand
 from .qr import QrCommand
 from .random import RandomCommand
 from .roll import RollCommand
+from .liet import LietCommand
 from .zypage import ZypageCommand
 
 
@@ -22,6 +23,7 @@ class General(
     RandomCommand,
     RollCommand,
     ZypageCommand,
+    LietCommand,
     commands.Cog,
 ):
     def __init__(self, bot):
