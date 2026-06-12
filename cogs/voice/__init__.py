@@ -75,6 +75,10 @@ class Voice(JoinCommand, LeaveCommand, commands.Cog):
 
     def _voice_client_for_guild(self, guild_id):
         for vc in self.bot.voice_clients:
+            guild = getattr(vc, "guild", None)
+            if guild and guild.id == guild_id:
+                return vc
+
             channel = getattr(vc, "channel", None)
             guild = getattr(channel, "guild", None)
             if guild and guild.id == guild_id:
@@ -86,7 +90,15 @@ class Voice(JoinCommand, LeaveCommand, commands.Cog):
         if task and task is not asyncio.current_task() and not task.done():
             task.cancel()
 
-    async def connect(self, channel_id, *, force=False):
+    def _schedule_reconnect(self, guild_id, channel_id):
+        task = self.reconnect_tasks.get(guild_id)
+        if task and not task.done():
+            return
+        self.reconnect_tasks[guild_id] = asyncio.create_task(
+            self.reconnect_after_grace(guild_id, channel_id)
+        )
+
+    async def connect(self, channel_id, *, restart_stale=False):
         channel = self.bot.get_channel(channel_id)
         if not isinstance(channel, discord.VoiceChannel):
             logger.warning("Invalid voice channel %s", channel_id)
@@ -111,12 +123,13 @@ class Voice(JoinCommand, LeaveCommand, commands.Cog):
                     self._cancel_reconnect(guild_id)
                     return vc
 
-                if not force:
+                if not restart_stale:
                     logger.info(
                         "Voice client for guild %s is not connected; waiting for "
                         "discord.py reconnect before starting a new handshake.",
                         guild_id,
                     )
+                    self._schedule_reconnect(guild_id, channel_id)
                     return vc
 
                 try:
@@ -162,7 +175,7 @@ class Voice(JoinCommand, LeaveCommand, commands.Cog):
 
                     vc = self._voice_client_for_guild(guild_id)
                     if vc is None or not vc.is_connected():
-                        await self.connect(channel_id, force=True)
+                        await self.connect(channel_id)
 
                 await asyncio.sleep(VOICE_RECONCILE_SECONDS)
 
@@ -187,7 +200,7 @@ class Voice(JoinCommand, LeaveCommand, commands.Cog):
                 guild_id,
                 VOICE_RECONNECT_GRACE_SECONDS,
             )
-            await self.connect(channel_id, force=True)
+            await self.connect(channel_id, restart_stale=True)
         except asyncio.CancelledError:
             pass
         except Exception:
@@ -220,9 +233,7 @@ class Voice(JoinCommand, LeaveCommand, commands.Cog):
                 channel_id = self.voice_channels.get(guild_id)
                 if channel_id:
                     self._cancel_reconnect(guild_id)
-                    self.reconnect_tasks[guild_id] = asyncio.create_task(
-                        self.reconnect_after_grace(guild_id, channel_id)
-                    )
+                    self._schedule_reconnect(guild_id, channel_id)
         elif member == self.bot.user and after.channel is not None:
             self._cancel_reconnect(after.channel.guild.id)
 

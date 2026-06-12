@@ -27,7 +27,7 @@ class JoinCommand:
         self.voice_channels[ctx.guild.id] = channel.id
         await self._save_channel(ctx.guild.id, channel.id)
         self._cancel_reconnect(ctx.guild.id)
-        vc = await self.connect(channel.id, force=True)
+        vc = await self.connect(channel.id)
         if vc:
             await ctx.reply(f"Đã vào {channel.mention}", mention_author=False)
             await self.update_presence()
