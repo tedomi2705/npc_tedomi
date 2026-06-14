@@ -33,6 +33,10 @@ class QrCommand:
                 ["orn", "ỏn", "<@593394674207555584>"],
                 "https://media.discordapp.net/attachments/1438873929728131082/1501476416850628668/image.png?ex=69fc3661&is=69fae4e1&hm=1401c4c6413be4321dc0b9fad498cdafa2dc406355d973d78a9e6e1234323a48&=&format=webp&quality=lossless&width=443&height=959",
             ),
+            (
+                ["già", "<@315750883826728961>"],
+                "https://cdn.discordapp.com/attachments/1435001187505275034/1515402370509570198/2c88d782-29b0-4e80-8865-9633e751082f.png?ex=6a2f88af&is=6a2e372f&hm=174e521e18c7edbcabd48feedc8004f61ab67571ad31efca28aabef1a3969c4e&",
+            ),
         ]
 
         for keywords, url in qr_targets:
@@ -40,4 +44,4 @@ class QrCommand:
                 await ctx.reply(url, mention_author=False)
                 return
 
-        await ctx.reply('Chỉ hỗ trợ QR của "meo", "mi", hoặc "ỏn".', mention_author=False)
+        await ctx.reply('Chỉ hỗ trợ QR của "meo", "mi", "già", hoặc "ỏn".', mention_author=False)
