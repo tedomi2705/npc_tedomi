@@ -14,7 +14,7 @@ class QrCommand:
     ):
         if choice is None:
             await ctx.reply(
-                "https://media.discordapp.net/attachments/1397095003976761364/1518567885310660678/43CBC1EC-D248-4891-85BA-471846BD3F7C.png?ex=6a3a640d&is=6a39128d&hm=058164fbfd37d160e882e7d07503060d3375a337d57685e9724a22bd77a85893&=&format=webp&quality=lossless&width=640&height=960",
+                "https://media.discordapp.net/attachments/1397095003976761364/1518569526927691866/6EF5B40C-E105-4F9B-9AB3-AEF171005249.png?ex=6a3a6594&is=6a391414&hm=68461a80acba17061f85feb8b46774887af892fb8f1cd9979c803b0813340a9f&=&format=webp&quality=lossless&width=640&height=960",
                 mention_author=False,
             )
             return
