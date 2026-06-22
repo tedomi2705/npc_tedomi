@@ -14,7 +14,7 @@ class QrCommand:
     ):
         if choice is None:
             await ctx.reply(
-                "https://media.discordapp.net/attachments/1409132849545871420/1499778199079489567/2384DC44-9DA1-4384-ABEE-A4E4B1B20DB9.jpg?ex=69fbf78b&is=69faa60b&hm=ada2abcc848bf7d973fd6d1ef496b79e989f7f49f3e69315fe589014df99598d&=&format=webp&width=860&height=856",
+                "https://media.discordapp.net/attachments/1397095003976761364/1518567885310660678/43CBC1EC-D248-4891-85BA-471846BD3F7C.png?ex=6a3a640d&is=6a39128d&hm=058164fbfd37d160e882e7d07503060d3375a337d57685e9724a22bd77a85893&=&format=webp&quality=lossless&width=640&height=960",
                 mention_author=False,
             )
             return
@@ -23,7 +23,7 @@ class QrCommand:
         qr_targets = [
             (
                 ["meo", "<@575518526811537408>", "<@611533816774787102>"],
-                "https://media.discordapp.net/attachments/1409132849545871420/1499778199389737102/att.by7O9FQUF9QDVoMUslJMKMXkA3svgJP3t_D1SOyuDuc.jpg?ex=69fbf78b&is=69faa60b&hm=1db9c29863a841a4b4557fe448229ab18255ae724085a0ffb81effa60086aaf9&=&format=webp&width=481&height=856",
+                "https://media.discordapp.net/attachments/1409132849545871420/1499778199079489567/2384DC44-9DA1-4384-ABEE-A4E4B1B20DB9.jpg?ex=69fbf78b&is=69faa60b&hm=ada2abcc848bf7d973fd6d1ef496b79e989f7f49f3e69315fe589014df99598d&=&format=webp&width=860&height=856",
             ),
             (
                 ["mi", "<@208174648657969152>"],
