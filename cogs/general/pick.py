@@ -4,7 +4,7 @@ from discord.ext import commands
 
 
 class PickCommand:
-    @commands.command()
+    @commands.command(aliases=["pick:"])
     async def pick(
         self,
         ctx,
