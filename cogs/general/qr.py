@@ -29,6 +29,10 @@ class QrCommand:
 
         qr_targets = [
             (
+                ["td", "duong", "<@466503036316155915>"],
+                "https://media.discordapp.net/attachments/1435001187505275033/1542102703348650024/IMG_9339.png?ex=6a90028f&is=6a8eb10f&hm=ba24742bcedeaad6fdb02849a125d6e329249cd3bf86458836bfecccfc9637aa&=&format=webp&quality=lossless&width=474&height=1024",
+            ),
+            (
                 ["meo", "<@575518526811537408>", "<@611533816774787102>"],
                 "https://media.discordapp.net/attachments/1409132849545871420/1499778199079489567/2384DC44-9DA1-4384-ABEE-A4E4B1B20DB9.jpg?ex=69fbf78b&is=69faa60b&hm=ada2abcc848bf7d973fd6d1ef496b79e989f7f49f3e69315fe589014df99598d&=&format=webp&width=860&height=856",
             ),
@@ -43,10 +47,6 @@ class QrCommand:
             (
                 ["gia", "<@315750883826728961>"],
                 "https://cdn.discordapp.com/attachments/1435001187505275034/1515402370509570198/2c88d782-29b0-4e80-8865-9633e751082f.png?ex=6a2f88af&is=6a2e372f&hm=174e521e18c7edbcabd48feedc8004f61ab67571ad31efca28aabef1a3969c4e&",
-            ),
-            (
-                ["td", "duong", "<@466503036316155915>"],
-                "https://media.discordapp.net/attachments/1435001187505275033/1542102703348650024/IMG_9339.png?ex=6a90028f&is=6a8eb10f&hm=ba24742bcedeaad6fdb02849a125d6e329249cd3bf86458836bfecccfc9637aa&=&format=webp&quality=lossless&width=474&height=1024",
             ),
         ]
 
